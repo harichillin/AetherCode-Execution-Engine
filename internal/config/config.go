@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/stjosephsplacements/AetherCode-Execution-Engine/internal/logging"
 )
 
 type Config struct {
@@ -157,6 +159,7 @@ func (c Config) Validate() error {
 	check(c.GOMEMLIMIT >= 0, "GOMEMLIMIT must be >= 0")
 	check(c.SandboxStdoutMaxBytes > 0 && c.SandboxStdoutMaxBytes <= 64<<20, "SandboxStdoutMaxBytes must be 1-67108864")
 	check(c.SandboxStderrMaxBytes > 0 && c.SandboxStderrMaxBytes <= 64<<20, "SandboxStderrMaxBytes must be 1-67108864")
+	check(logging.ValidFormat(c.LogFormat), "LogFormat (AC_LOG_FORMAT) must be one of: json, text, gcp, cloudwatch")
 
 	if c.AuthEnabled && c.OIDCAudience == "" {
 		errs = append(errs, "OIDCAudience (AC_OIDC_AUDIENCE) is required when auth is enabled")
