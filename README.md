@@ -219,7 +219,7 @@ Configuration parameters are loaded from environment variables on startup. Refer
 | `AC_WORKER_COUNT` | `8` | Total concurrent worker execution goroutines |
 | `AC_JOB_TIMEOUT` | `90s` | Maximum default execution budget per submission |
 | `AC_LOG_LEVEL` | `info` | Logging verbosity: `debug`, `info`, `warn`, `error` |
-| `AC_LOG_FORMAT` | `json` | Logging format: `json` (production) or `text` (development) |
+| `AC_LOG_FORMAT` | `json` | Logging format: `json` (production), `text` (development), `gcp` (Google Cloud Logging keys `severity`/`message`), or `cloudwatch` (AWS keys `level`/`message`/`timestamp`) |
 | `AC_AUTH_ENABLED` | `false` | Enable Zitadel OIDC JWT token verification |
 | `AC_OIDC_ISSUER` | `https://sso.example.com` | Expected OIDC identity issuer URL |
 | `AC_OIDC_JWKS_URL` | `http://127.0.0.1:8087/oauth/v2/keys` | Internal JWKS public key endpoint |

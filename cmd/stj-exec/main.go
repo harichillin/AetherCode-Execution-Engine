@@ -24,6 +24,7 @@ import (
 	"github.com/stjosephsplacements/AetherCode-Execution-Engine/internal/config"
 	"github.com/stjosephsplacements/AetherCode-Execution-Engine/internal/db"
 	"github.com/stjosephsplacements/AetherCode-Execution-Engine/internal/gateway"
+	"github.com/stjosephsplacements/AetherCode-Execution-Engine/internal/logging"
 	"github.com/stjosephsplacements/AetherCode-Execution-Engine/internal/metrics"
 	"github.com/stjosephsplacements/AetherCode-Execution-Engine/internal/queue"
 	"github.com/stjosephsplacements/AetherCode-Execution-Engine/internal/ratelimit"
@@ -39,14 +40,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var logHandler slog.Handler
-	logOpts := &slog.HandlerOptions{Level: parseLogLevel(cfg.LogLevel)}
-	if cfg.LogFormat == "text" {
-		logHandler = slog.NewTextHandler(os.Stderr, logOpts)
-	} else {
-		logHandler = slog.NewJSONHandler(os.Stderr, logOpts)
-	}
-	slog.SetDefault(slog.New(logHandler))
+	slog.SetDefault(slog.New(logging.NewHandler(cfg.LogFormat, parseLogLevel(cfg.LogLevel), os.Stderr)))
 
 	// Apply sandbox output size limits.
 	sandbox.StdoutMax = cfg.SandboxStdoutMaxBytes

@@ -65,6 +65,7 @@ func TestValidateRequiresFields(t *testing.T) {
 		{"zero job timeout", func(c *Config) { c.JobTimeout = 0 }},
 		{"zero submit weight", func(c *Config) { c.SubmitWeight = 0 }},
 		{"auth enabled without audience", func(c *Config) { c.AuthEnabled = true }},
+		{"unknown log format", func(c *Config) { c.LogFormat = "gpc" }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
