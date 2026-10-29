@@ -49,7 +49,10 @@ func gcpAttr(groups []string, a slog.Attr) slog.Attr {
 	}
 	switch a.Key {
 	case slog.LevelKey:
-		level, _ := a.Value.Any().(slog.Level)
+		level, ok := a.Value.Any().(slog.Level)
+		if !ok {
+			return a // a caller's own "level" attr, not the record's level
+		}
 		return slog.String("severity", gcpSeverity(level))
 	case slog.MessageKey:
 		a.Key = "message"

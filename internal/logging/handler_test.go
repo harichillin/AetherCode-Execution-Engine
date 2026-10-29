@@ -75,6 +75,13 @@ func TestGCPSeverityMapping(t *testing.T) {
 	}
 }
 
+func TestGCPKeepsUserLevelAttr(t *testing.T) {
+	rec := logOne(t, FormatGCP, slog.LevelError, "boom", "level", "fatal")
+	if rec["severity"] != "ERROR" || rec["level"] != "fatal" {
+		t.Fatalf("got severity=%v level=%v, want ERROR and fatal", rec["severity"], rec["level"])
+	}
+}
+
 func TestCloudWatchFieldNames(t *testing.T) {
 	rec := logOne(t, FormatCloudWatch, slog.LevelError, "boom")
 	assertKeys(t, rec, []string{"timestamp", "level", "message"}, []string{"time", "msg", "severity"})
@@ -103,8 +110,14 @@ func TestLevelFilterApplies(t *testing.T) {
 		var buf bytes.Buffer
 		logger := slog.New(NewHandler(format, slog.LevelWarn, &buf))
 		logger.Info("dropped")
-		if buf.Len() != 0 {
-			t.Errorf("%s: info record written below warn level: %s", format, buf.String())
+		logger.Warn("kept-warn")
+		logger.Error("kept-error")
+		out := buf.String()
+		if strings.Contains(out, "dropped") {
+			t.Errorf("%s: info record written below warn level: %s", format, out)
+		}
+		if !strings.Contains(out, "kept-warn") || !strings.Contains(out, "kept-error") {
+			t.Errorf("%s: warn/error records missing at warn level: %s", format, out)
 		}
 	}
 }
