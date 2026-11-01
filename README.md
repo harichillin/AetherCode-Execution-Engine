@@ -300,6 +300,7 @@ Submit code for evaluation against test cases.
 | `tests` | array | Yes | Array of 1 to 100 test objects |
 | `tests[].input` | string | Yes | Test standard input (max 8 MB per test) |
 | `tests[].expected_output` | string | Yes | Expected test standard output (max 8 MB per test) |
+| `tests[].env` | array | No | `KEY=VALUE` env vars for this test's run (`["TZ=UTC"]`); overrides `env` entries with the same key |
 | `checker` | string | No | Output comparison mode: `exact` (default), `token`, `float`, or `custom` |
 | `checker_code` | string | No | Custom checker source code (required when `checker: "custom"`, max 64 KB) |
 | `checker_language` | string | No | Custom checker language (defaults to `python`) |
@@ -307,6 +308,7 @@ Submit code for evaluation against test cases.
 | `interactor_language` | string | No | Interactor language (defaults to `python`) |
 | `files` | object | No | Multi-file submission map `{"helper.h": "...", "sol.cpp": "..."}` (max 10 files, 128 KB total) |
 | `compiler_flags` | array | No | Whitelisted optimization/standard flags (`["-O3", "-std=c++20"]`) |
+| `env` | array | No | `KEY=VALUE` env vars applied to every test's run (`["TZ=UTC", "LANG=en_US.UTF-8"]`). Max 32 vars, 4 KB per value, 8 KB total. Loader and runtime hooks (`LD_*`, `GLIBC_TUNABLES`, `JAVA_*`, `PYTHON*`, `NODE_*`, ...) and engine-set keys (`PATH`, `HOME`, ...) are rejected. Not applied to the compiler, checker, or interactor |
 | `callback_url` | string | No | Optional HTTP/HTTPS webhook URL for asynchronous completion callback |
 | `callback_secret` | string | No | Optional HMAC-SHA256 signature secret for webhook validation |
 | `priority` | string | No | Priority tier: `run` (P0 default), `submit` (P1), or `bulk` (P2) |

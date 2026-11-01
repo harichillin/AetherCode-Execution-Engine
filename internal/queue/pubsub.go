@@ -120,6 +120,13 @@ func (p *PubSub) PrepareAndEnqueue(ctx context.Context, jobID string, set TestSe
 		for i, t := range set.Tests {
 			prefix := strconv.Itoa(i)
 			fields = append(fields, prefix+":input", t.Input, prefix+":expected", t.ExpectedOutput)
+			if len(t.Env) > 0 {
+				envJSON, err := json.Marshal(t.Env)
+				if err != nil {
+					return fmt.Errorf("pubsub: marshal env for test %d: %w", i, err)
+				}
+				fields = append(fields, prefix+":env_json", string(envJSON))
+			}
 		}
 		pipe.HSet(ctx, key, fields...)
 		pipe.Expire(ctx, key, testDataTTL)
@@ -278,6 +285,14 @@ func (p *PubSub) GetTests(ctx context.Context, jobID string) (TestSet, error) {
 			Input:          fields[prefix+":input"],
 			ExpectedOutput: fields[prefix+":expected"],
 		}
+		// Absent on tests without env and on jobs enqueued before env existed.
+		// Corrupt data fails the job: running without a required variable
+		// (e.g. TZ=UTC) would produce a wrong verdict instead of an error.
+		if ej := fields[prefix+":env_json"]; ej != "" {
+			if err := json.Unmarshal([]byte(ej), &tests[i].Env); err != nil {
+				return TestSet{}, fmt.Errorf("pubsub: corrupt env for test %d in %s: %w", i, key, err)
+			}
+		}
 	}
 	var limits sandbox.RunLimits
 	// Absent on jobs enqueued before limits existed: zero keeps language defaults.
@@ -332,6 +347,7 @@ func (p *PubSub) GetTests(ctx context.Context, jobID string) (TestSet, error) {
 type TestData struct {
 	Input          string
 	ExpectedOutput string
+	Env            []string // optional KEY=VALUE entries for this test's run, validated by the gateway
 }
 
 // TestSet is everything a job needs besides its source: the tests,

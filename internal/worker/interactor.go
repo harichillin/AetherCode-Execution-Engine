@@ -17,12 +17,15 @@ func buildInteractiveCmds(
 	studentFileID string,
 	studentLimits sandbox.RunLimits,
 	extraFiles map[string]string,
+	studentEnv []string,
 	it *sandboxProgram,
 	inputData string,
 	expectedOutput string,
 ) ([]sandbox.Cmd, []sandbox.PipeMap) {
-	// Build student Cmd: stdin and stdout are pipes (null), stderr is collected
-	studentCmd := sandbox.BuildRunCmdWithOptions(studentLang, studentSource, "", studentFileID, studentLimits, extraFiles)
+	// Build student Cmd: stdin and stdout are pipes (null), stderr is collected.
+	// Only the student gets the caller's env; the interactor keeps its
+	// language's own RunEnv so problem-setter code runs in a fixed environment.
+	studentCmd := sandbox.BuildRunCmdWithOptions(studentLang, studentSource, "", studentFileID, studentLimits, extraFiles, studentEnv)
 	// Stdin (index 0) and Stdout (index 1) are handled by pipeMapping, so Files must have null placeholders
 	studentCmd.Files = []sandbox.CmdFile{
 		{}, // fd 0: pipe in from interactor

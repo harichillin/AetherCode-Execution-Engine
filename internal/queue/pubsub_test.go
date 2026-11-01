@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -360,8 +361,47 @@ func TestPrepareAndGetTests_RoundTripsChecker(t *testing.T) {
 	if got.Limits != set.Limits {
 		t.Errorf("Limits = %+v, want %+v", got.Limits, set.Limits)
 	}
-	if len(got.Tests) != 2 || got.Tests[0] != set.Tests[0] || got.Tests[1] != set.Tests[1] {
+	if !reflect.DeepEqual(got.Tests, set.Tests) {
 		t.Errorf("Tests = %+v, want %+v", got.Tests, set.Tests)
+	}
+}
+
+func TestPrepareAndGetTests_RoundTripsPerTestEnv(t *testing.T) {
+	_, rdb := newTestRedis(t)
+	ctx := context.Background()
+	ps := NewPubSub(rdb)
+
+	set := TestSet{Tests: []TestData{
+		{Input: "a", ExpectedOutput: "b", Env: []string{"TZ=UTC", "MODE=x=y"}},
+		{Input: "c", ExpectedOutput: "d"}, // no env: must stay nil, not []string{}
+	}}
+	evt := eventlog.New("job-env", eventlog.EventQueued, nil)
+	if err := ps.PrepareAndEnqueue(ctx, "job-env", set, evt, "ac:stream:e"); err != nil {
+		t.Fatalf("PrepareAndEnqueue: %v", err)
+	}
+	if rdb.HExists(ctx, "ac:tests:job-env", "1:env_json").Val() {
+		t.Error("test without env should not write an env_json field")
+	}
+
+	got, err := ps.GetTests(ctx, "job-env")
+	if err != nil {
+		t.Fatalf("GetTests: %v", err)
+	}
+	if !reflect.DeepEqual(got.Tests, set.Tests) {
+		t.Errorf("Tests = %+v, want %+v", got.Tests, set.Tests)
+	}
+}
+
+func TestGetTests_CorruptEnvFailsJob(t *testing.T) {
+	_, rdb := newTestRedis(t)
+	ctx := context.Background()
+	ps := NewPubSub(rdb)
+
+	if err := rdb.HSet(ctx, "ac:tests:job-bad", "count", 1, "0:input", "a", "0:expected", "b", "0:env_json", "{not json").Err(); err != nil {
+		t.Fatalf("HSet: %v", err)
+	}
+	if _, err := ps.GetTests(ctx, "job-bad"); err == nil {
+		t.Fatal("GetTests with corrupt env_json: want error, got nil")
 	}
 }
 

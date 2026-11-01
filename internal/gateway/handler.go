@@ -159,6 +159,9 @@ type executeRequest struct {
 	Files map[string]string `json:"files,omitempty"`
 	// Optional whitelisted compiler flags: ["-O3", "-std=c++20"]
 	CompilerFlags []string `json:"compiler_flags,omitempty"`
+	// Optional env for every test's run: ["TZ=UTC"]. A test's own env
+	// overrides entries with the same key.
+	Env []string `json:"env,omitempty"`
 	// Optional webhook notification URL and secret for offline or bulk submissions
 	CallbackURL    string `json:"callback_url,omitempty"`
 	CallbackSecret string `json:"callback_secret,omitempty"`
@@ -171,8 +174,9 @@ type executeRequest struct {
 }
 
 type testInput struct {
-	Input          string `json:"input"`
-	ExpectedOutput string `json:"expected_output"`
+	Input          string   `json:"input"`
+	ExpectedOutput string   `json:"expected_output"`
+	Env            []string `json:"env,omitempty"`
 }
 
 type executeResponse struct {
@@ -246,6 +250,26 @@ func (h *Handler) HandleExecute(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, "test input/output exceeds 8MB", http.StatusBadRequest)
 			return
 		}
+	}
+	if err := sandbox.ValidateEnv(req.Env); err != nil {
+		jsonError(w, "env: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	// Merge the submission-level env into each test once, here, so the queue
+	// and worker only ever handle a single per-test list. The merged list is
+	// re-validated because the caps apply to what actually reaches the sandbox.
+	testEnvs := make([][]string, len(req.Tests))
+	for i, t := range req.Tests {
+		if err := sandbox.ValidateEnv(t.Env); err != nil {
+			jsonError(w, fmt.Sprintf("tests[%d].env: %v", i, err), http.StatusBadRequest)
+			return
+		}
+		merged := sandbox.MergeEnv(req.Env, t.Env)
+		if err := sandbox.ValidateEnv(merged); err != nil {
+			jsonError(w, fmt.Sprintf("tests[%d].env: %v", i, err), http.StatusBadRequest)
+			return
+		}
+		testEnvs[i] = merged
 	}
 	if !model.ValidChecker(req.Checker) {
 		jsonError(w, "checker must be one of: exact, token, float, custom", http.StatusBadRequest)
@@ -429,7 +453,7 @@ func (h *Handler) HandleExecute(w http.ResponseWriter, r *http.Request) {
 	// Store tests + publish QUEUED event + enqueue in a single Redis pipeline
 	tests := make([]queue.TestData, len(req.Tests))
 	for i, t := range req.Tests {
-		tests[i] = queue.TestData{Input: t.Input, ExpectedOutput: t.ExpectedOutput}
+		tests[i] = queue.TestData{Input: t.Input, ExpectedOutput: t.ExpectedOutput, Env: testEnvs[i]}
 	}
 
 	queuedEvt := eventlog.New(jobID.String(), eventlog.EventQueued, nil)
