@@ -302,15 +302,17 @@ func BuildCacheSourceCmd(lang LangConfig, sourceCode string) Cmd {
 // For interpreted languages with a cached source fileID, pass it to avoid
 // embedding source in every Cmd; pass empty string to inline the source.
 func BuildRunCmd(lang LangConfig, sourceCode, stdinData, fileID string, limits RunLimits) Cmd {
-	return BuildRunCmdWithOptions(lang, sourceCode, stdinData, fileID, limits, nil)
+	return BuildRunCmdWithOptions(lang, sourceCode, stdinData, fileID, limits, nil, nil)
 }
 
-// BuildRunCmdWithOptions builds the go-judge Cmd supporting extra files for interpreted runs.
-func BuildRunCmdWithOptions(lang LangConfig, sourceCode, stdinData, fileID string, limits RunLimits, extraFiles map[string]string) Cmd {
+// BuildRunCmdWithOptions builds the go-judge Cmd supporting extra files for
+// interpreted runs and a caller-supplied env (validated by ValidateEnv)
+// appended after the language's own RunEnv.
+func BuildRunCmdWithOptions(lang LangConfig, sourceCode, stdinData, fileID string, limits RunLimits, extraFiles map[string]string, env []string) Cmd {
 	cpu, memory := lang.Effective(limits)
 	cmd := Cmd{
 		Args:        lang.RunArgs,
-		Env:         lang.RunEnv,
+		Env:         runEnv(lang.RunEnv, env),
 		Files:       []CmdFile{Stdin(stdinData), Collector("stdout", StdoutMax), Collector("stderr", StderrMax)},
 		CPULimit:    cpu,
 		ClockLimit:  ClockLimit(cpu),

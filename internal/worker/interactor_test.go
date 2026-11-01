@@ -76,7 +76,7 @@ func TestInteractiveProblems_Workflow(t *testing.T) {
 
 	// 2. Build interactive cmds and verify pipe mappings
 	lang := sandbox.Languages["python"]
-	cmds, pipes := buildInteractiveCmds(lang, "print('interactive')", "", sandbox.RunLimits{}, nil, it, "input_secret\n", "answer\n")
+	cmds, pipes := buildInteractiveCmds(lang, "print('interactive')", "", sandbox.RunLimits{}, nil, nil, it, "input_secret\n", "answer\n")
 	if len(cmds) != 2 {
 		t.Fatalf("expected 2 cmds, got %d", len(cmds))
 	}

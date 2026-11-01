@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -556,5 +557,75 @@ func assertExecuteError(t *testing.T, rec *httptest.ResponseRecorder, code int, 
 	}
 	if resp.Error != msg {
 		t.Errorf("error = %q, want %q", resp.Error, msg)
+	}
+}
+
+func TestHandleExecute_RejectsInvalidEnv(t *testing.T) {
+	judgeSrv := fakeJudgeServer(t, "1.13.0")
+	judge := sandbox.NewClient(judgeSrv.URL, "test-token")
+	_, rdb := newTestRedis(t)
+
+	submitStream := queue.NewStream(rdb, "ac:submissions:submit", "workers")
+	runStream := queue.NewStream(rdb, "ac:submissions:run", "workers")
+	h := NewHandler(nil, submitStream, runStream, queue.NewPubSub(rdb), judge, rdb, nil, nil, 5000, 8, nil)
+
+	// Rejection happens before the DB insert (nil pool would panic otherwise),
+	// so an invalid env never leaves an orphan submission row.
+	cases := []struct{ name, body, msg string }{
+		{"submission-level denied key",
+			`{"language":"python","source_code":"print(1)","env":["LD_PRELOAD=/w/x.so"],"tests":[{"input":"","expected_output":"1"}]}`,
+			`env: key "LD_PRELOAD" is not permitted`},
+		{"per-test reserved key",
+			`{"language":"python","source_code":"print(1)","tests":[{"input":"","expected_output":"1"},{"input":"","expected_output":"1","env":["PATH=/w"]}]}`,
+			`tests[1].env: key "PATH" is not permitted`},
+		{"per-test malformed entry",
+			`{"language":"python","source_code":"print(1)","tests":[{"input":"","expected_output":"1","env":["TZ"]}]}`,
+			`tests[0].env: entry "TZ" must be KEY=VALUE`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertExecuteError(t, postExecute(h, tc.body), http.StatusBadRequest, tc.msg)
+		})
+	}
+	if n, _ := rdb.XLen(context.Background(), runStream.StreamName()).Result(); n != 0 {
+		t.Errorf("XLen(run) = %d, want 0", n)
+	}
+}
+
+func TestHandleExecute_MergesSubmissionEnvIntoTests(t *testing.T) {
+	judgeSrv := fakeJudgeServer(t, "1.13.0")
+	judge := sandbox.NewClient(judgeSrv.URL, "test-token")
+	_, rdb := newTestRedis(t)
+	pool := newFakePGPool(t)
+	pubsub := queue.NewPubSub(rdb)
+
+	submitStream := queue.NewStream(rdb, "ac:submissions:submit", "workers")
+	runStream := queue.NewStream(rdb, "ac:submissions:run", "workers")
+	h := NewHandler(pool, submitStream, runStream, pubsub, judge, rdb, nil, nil, 5000, 8, nil)
+
+	body := `{"language":"python","source_code":"print(1)","env":["TZ=UTC","LANG=C"],"tests":[` +
+		`{"input":"","expected_output":"1"},` +
+		`{"input":"","expected_output":"1","env":["TZ=Asia/Kolkata","AC_MODE=strict"]}]}`
+	rec := postExecute(h, body)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	var resp executeResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+
+	set, err := pubsub.GetTests(context.Background(), resp.JobID)
+	if err != nil {
+		t.Fatalf("GetTests: %v", err)
+	}
+	want := [][]string{
+		{"TZ=UTC", "LANG=C"},
+		{"TZ=Asia/Kolkata", "LANG=C", "AC_MODE=strict"}, // per-test TZ wins
+	}
+	for i, w := range want {
+		if !reflect.DeepEqual(set.Tests[i].Env, w) {
+			t.Errorf("tests[%d].Env = %q, want %q", i, set.Tests[i].Env, w)
+		}
 	}
 }

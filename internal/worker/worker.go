@@ -102,6 +102,7 @@ type testData struct {
 	CheckerLanguage    string
 	InteractorCode     string
 	InteractorLanguage string
+	Env                []string // caller env for the submission's run; nil means the language defaults only
 }
 
 type jobSpec struct {
@@ -328,6 +329,7 @@ func (w *Worker) loadTests(ctx context.Context, jobID string) (jobSpec, error) {
 			CheckerLanguage:    set.CheckerLanguage,
 			InteractorCode:     set.InteractorCode,
 			InteractorLanguage: set.InteractorLanguage,
+			Env:                rt.Env,
 		}
 	}
 	return jobSpec{
@@ -450,7 +452,7 @@ func (w *Worker) runTestsBatched(ctx context.Context, jobID string, lang sandbox
 		if it != nil {
 			// For interactive runs, execute one-by-one with bidirectional pipeMapping
 			for i, tc := range batch {
-				interactiveCmds, pipeMapping := buildInteractiveCmds(lang, sourceCode, fileID, limits, extraFiles, it, tc.Input, tc.ExpectedOutput)
+				interactiveCmds, pipeMapping := buildInteractiveCmds(lang, sourceCode, fileID, limits, extraFiles, tc.Env, it, tc.Input, tc.ExpectedOutput)
 				runResults, runErr := w.judge.Run(ctx, sandbox.Request{
 					Cmd:         interactiveCmds,
 					PipeMapping: pipeMapping,
@@ -512,7 +514,7 @@ func (w *Worker) runTestsBatched(ctx context.Context, jobID string, lang sandbox
 		} else {
 			cmds := make([]sandbox.Cmd, len(batch))
 			for i, tc := range batch {
-				cmds[i] = sandbox.BuildRunCmdWithOptions(lang, sourceCode, tc.Input, fileID, limits, extraFiles)
+				cmds[i] = sandbox.BuildRunCmdWithOptions(lang, sourceCode, tc.Input, fileID, limits, extraFiles, tc.Env)
 			}
 
 			batchResults, runErr := w.judge.Run(ctx, sandbox.Request{Cmd: cmds})
