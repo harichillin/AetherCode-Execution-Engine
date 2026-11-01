@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -286,12 +287,22 @@ func (p *PubSub) GetTests(ctx context.Context, jobID string) (TestSet, error) {
 			ExpectedOutput: fields[prefix+":expected"],
 		}
 		// Absent on tests without env and on jobs enqueued before env existed.
-		// Corrupt data fails the job: running without a required variable
-		// (e.g. TZ=UTC) would produce a wrong verdict instead of an error.
-		if ej := fields[prefix+":env_json"]; ej != "" {
-			if err := json.Unmarshal([]byte(ej), &tests[i].Env); err != nil {
+		// The writer never stores an empty list, so a present field must decode
+		// to a non-empty, valid env; anything else ("", null, [], a denied key)
+		// fails the job rather than running without a required variable.
+		if ej, ok := fields[prefix+":env_json"]; ok {
+			var env []string
+			err := json.Unmarshal([]byte(ej), &env)
+			if err == nil && len(env) == 0 {
+				err = errors.New("empty env")
+			}
+			if err == nil {
+				err = sandbox.ValidateEnv(env)
+			}
+			if err != nil {
 				return TestSet{}, fmt.Errorf("pubsub: corrupt env for test %d in %s: %w", i, key, err)
 			}
+			tests[i].Env = env
 		}
 	}
 	var limits sandbox.RunLimits

@@ -397,11 +397,15 @@ func TestGetTests_CorruptEnvFailsJob(t *testing.T) {
 	ctx := context.Background()
 	ps := NewPubSub(rdb)
 
-	if err := rdb.HSet(ctx, "ac:tests:job-bad", "count", 1, "0:input", "a", "0:expected", "b", "0:env_json", "{not json").Err(); err != nil {
-		t.Fatalf("HSet: %v", err)
-	}
-	if _, err := ps.GetTests(ctx, "job-bad"); err == nil {
-		t.Fatal("GetTests with corrupt env_json: want error, got nil")
+	// The writer never stores an empty env, so every present-but-unusable
+	// value must fail instead of silently running with language defaults.
+	for _, v := range []string{"{not json", "", "null", "[]", `["LD_PRELOAD=/w/x.so"]`} {
+		if err := rdb.HSet(ctx, "ac:tests:job-bad", "count", 1, "0:input", "a", "0:expected", "b", "0:env_json", v).Err(); err != nil {
+			t.Fatalf("HSet: %v", err)
+		}
+		if _, err := ps.GetTests(ctx, "job-bad"); err == nil {
+			t.Errorf("GetTests with env_json %q: want error, got nil", v)
+		}
 	}
 }
 

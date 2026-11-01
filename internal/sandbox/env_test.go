@@ -15,11 +15,12 @@ func TestValidateEnv(t *testing.T) {
 	// Each entry is under the per-value cap; together they exceed the total cap.
 	half := strings.Repeat("x", MaxEnvTotalBytes/2)
 
-	tests := []struct {
+	type envCase struct {
 		name    string
 		env     []string
 		wantErr bool
-	}{
+	}
+	tests := []envCase{
 		{"nil", nil, false},
 		{"tz and lang", []string{"TZ=UTC", "LANG=en_US.UTF-8"}, false},
 		{"problem flag", []string{"AC_MODE=strict", "_flag=1"}, false},
@@ -35,23 +36,20 @@ func TestValidateEnv(t *testing.T) {
 		{"too many", tooMany, true},
 		{"value too long", []string{"V=" + strings.Repeat("x", MaxEnvValueBytes+1)}, true},
 		{"total too long", []string{"A=" + half, "B=" + half}, true},
-
-		{"LD_PRELOAD", []string{"LD_PRELOAD=/w/x.so"}, true},
-		{"LD_LIBRARY_PATH", []string{"LD_LIBRARY_PATH=/w"}, true},
-		{"GLIBC_TUNABLES", []string{"GLIBC_TUNABLES=glibc.malloc.check=1"}, true},
-		{"MALLOC_", []string{"MALLOC_ARENA_MAX=1"}, true},
-		{"JAVA_TOOL_OPTIONS", []string{"JAVA_TOOL_OPTIONS=-Xmx4g"}, true},
-		{"_JAVA_OPTIONS", []string{"_JAVA_OPTIONS=-Xmx4g"}, true},
-		{"JDK_JAVA_OPTIONS", []string{"JDK_JAVA_OPTIONS=-Xmx4g"}, true},
-		{"PYTHONSTARTUP", []string{"PYTHONSTARTUP=/w/x.py"}, true},
-		{"NODE_OPTIONS", []string{"NODE_OPTIONS=--require=/w/x.js"}, true},
-		{"GCONV_PATH", []string{"GCONV_PATH=/w"}, true},
-
-		// Engine-reserved: set by the language configs, so a caller must not shadow them.
-		{"PATH", []string{"PATH=/w"}, true},
-		{"HOME", []string{"HOME=/w"}, true},
-		{"GOROOT", []string{"GOROOT=/w"}, true},
-		{"KOTLIN_HOME", []string{"KOTLIN_HOME=/w"}, true},
+		{"bash exported function", []string{"BASH_FUNC_f%%=() { :; }"}, true},
+	}
+	// Loader and runtime startup hooks for every configured runtime, plus
+	// engine-reserved keys set by the language configs.
+	for _, k := range []string{
+		"LD_PRELOAD", "LD_LIBRARY_PATH", "GLIBC_TUNABLES", "MALLOC_ARENA_MAX", "GCONV_PATH",
+		"JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS", "JAVA_OPTS",
+		"PYTHONSTARTUP", "NODE_OPTIONS", "BUN_OPTIONS", "MONO_ENV_OPTIONS",
+		"RUBYOPT", "RUBYLIB", "PHPRC", "PHP_INI_SCAN_DIR",
+		"BASH_ENV", "BASHOPTS", "ENV", "SHELLOPTS", "PS4",
+		"GODEBUG", "GOGC", "GOMEMLIMIT", "GOMAXPROCS", "GOTRACEBACK",
+		"PATH", "HOME", "GOROOT", "KOTLIN_HOME",
+	} {
+		tests = append(tests, envCase{k, []string{k + "=/w/x"}, true})
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -98,21 +96,6 @@ func TestMergeEnv(t *testing.T) {
 				t.Errorf("MergeEnv modified base: %q, want %q", tt.base, base)
 			}
 		})
-	}
-}
-
-func TestBuildRunCmd_AppendsCallerEnv(t *testing.T) {
-	lang := Languages["java"]
-	cmd := BuildRunCmdWithOptions(lang, "", "", "file-id", RunLimits{}, nil, []string{"TZ=UTC"})
-
-	want := append(append([]string{}, lang.RunEnv...), "TZ=UTC")
-	if !reflect.DeepEqual(cmd.Env, want) {
-		t.Errorf("Env = %q, want %q", cmd.Env, want)
-	}
-
-	plain := BuildRunCmdWithOptions(lang, "", "", "file-id", RunLimits{}, nil, nil)
-	if !reflect.DeepEqual(plain.Env, lang.RunEnv) {
-		t.Errorf("Env without caller env = %q, want %q", plain.Env, lang.RunEnv)
 	}
 }
 

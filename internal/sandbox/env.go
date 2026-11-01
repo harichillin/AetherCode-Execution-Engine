@@ -23,15 +23,22 @@ var envKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // turns a memory-limit verdict into a runtime error). go-judge confinement
 // does not depend on the env, so this keeps verdicts deterministic rather
 // than guarding the sandbox boundary itself.
+//
+// Audited per runtime in Languages; a new language must add its own hooks.
 var deniedEnvPrefixes = []string{
-	"LD_",     // LD_PRELOAD, LD_LIBRARY_PATH, LD_AUDIT, ...
+	"LD_",     // dynamic loader (all native runs): LD_PRELOAD, LD_AUDIT, ...
 	"DYLD_",   // macOS loader equivalents; harmless on Linux, denied for clarity
 	"MALLOC_", // glibc allocator tuning
-	"PYTHON",  // PYTHONSTARTUP, PYTHONPATH, PYTHONHOME, ...
-	"NODE_",   // NODE_OPTIONS=--require, NODE_PATH, ...
-	"JAVA_",   // JAVA_TOOL_OPTIONS, JAVA_HOME
-	"_JAVA_",  // _JAVA_OPTIONS
-	"JDK_",    // JDK_JAVA_OPTIONS
+	"PYTHON",  // python3: PYTHONSTARTUP, PYTHONPATH, ...
+	"NODE_",   // node: NODE_OPTIONS=--require, NODE_PATH
+	"BUN_",    // bun (typescript): BUN_OPTIONS=--preload
+	"JAVA_",   // java, kotlin: JAVA_TOOL_OPTIONS, JAVA_OPTS
+	"_JAVA_",  // java, kotlin: _JAVA_OPTIONS
+	"JDK_",    // java, kotlin: JDK_JAVA_OPTIONS
+	"MONO_",   // mono (csharp): MONO_ENV_OPTIONS, MONO_PATH
+	"RUBY",    // ruby: RUBYOPT=-r, RUBYLIB
+	"PHP",     // php: PHPRC, PHP_INI_SCAN_DIR (auto_prepend_file)
+	"BASH",    // bash: BASH_ENV, BASHOPTS
 }
 
 var deniedEnvKeys = map[string]bool{
@@ -41,6 +48,14 @@ var deniedEnvKeys = map[string]bool{
 	"NLSPATH":        true, // message catalog loading
 	"TMPDIR":         true,
 	"IFS":            true,
+	"ENV":            true, // sh/bash POSIX-mode startup file
+	"SHELLOPTS":      true, // bash: xtrace + PS4 command substitution
+	"PS4":            true,
+	"GODEBUG":        true, // go binaries: runtime and memory behaviour
+	"GOGC":           true,
+	"GOMEMLIMIT":     true,
+	"GOMAXPROCS":     true,
+	"GOTRACEBACK":    true,
 }
 
 // reservedEnvKeys are the keys the engine itself sets for any language
